@@ -539,13 +539,13 @@ class Trainer:
         if len(self.train_traj_dset) > 0 and self.cfg.has_predictor:
             with torch.no_grad():
                 train_rollout_logs = self.openloop_rollout(
-                    self.train_traj_dset, mode="train"
+                    self.train_traj_dset, mode="train", rand_start_end=False
                 )
                 train_rollout_logs = {
                     f"train_{k}": [v] for k, v in train_rollout_logs.items()
                 }
                 self.logs_update(train_rollout_logs)
-                val_rollout_logs = self.openloop_rollout(self.val_traj_dset, mode="val")
+                val_rollout_logs = self.openloop_rollout(self.val_traj_dset, mode="val", rand_start_end=False)
                 val_rollout_logs = {
                     f"val_{k}": [v] for k, v in val_rollout_logs.items()
                 }

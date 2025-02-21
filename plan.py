@@ -273,7 +273,7 @@ class PlanWorkspace:
             if self.dset[i][0]["visual"].shape[0] >= traj_len
         ]
         if len(valid_traj) == 0:
-            raise ValueError("No trajectory in the dataset is long enough.")
+            raise ValueError(f"No trajectory in the dataset is long enough for given length ({self.frameskip}*{self.goal_H}+1>={traj_len}).")
 
         # sample init_states from dset
         for i in range(self.n_evals):
@@ -499,7 +499,7 @@ def main(cfg: OmegaConf):
         cfg["saved_folder"] = os.getcwd()
         log.info(f"Planning result saved dir: {cfg['saved_folder']}")
     cfg_dict = cfg_to_dict(cfg)
-    cfg_dict["wandb_logging"] = True
+    cfg_dict["wandb_logging"] = False 
     planning_main(cfg_dict)
 
 
