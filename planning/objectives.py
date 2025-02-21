@@ -81,8 +81,7 @@ def create_objective_fn(alpha, base, mode="last"):
         return cost 
 
     def objective_fn_cd(z_obs_pred, z_obs_tgt):
-        cd = chamfer_distance(z_obs_pred["visual"][:,-1:], z_obs_tgt["visual"])
-        return 1-cd
+        return chamfer_distance(z_obs_pred["visual"][:,-1:], z_obs_tgt["visual"])
 
     if mode == "mse_last":
         return objective_fn_last
