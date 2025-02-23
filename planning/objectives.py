@@ -112,7 +112,7 @@ def create_objective_fn(alpha, base, mode="last"):
             return chamfer_distance(z_obs_pred["visual"][:,-1:], z_obs_tgt["visual"])
         else:
             dist = 0
-            for each z in z_obs_tgt:
+            for z in z_obs_tgt:
                 cd = chamfer_distance(z_obs_pred["visual"][:,-1:], z["visual"])
                 if z["reach"]: # if trying to reach that goal
                     dist = dist + cd
