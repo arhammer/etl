@@ -61,7 +61,7 @@ class CEMPlanner(BasePlanner):
             mu = torch.cat([mu, new_mu.to(device)], dim=1)
         return mu, sigma
 
-    def plan(self, obs_0, obs_g, actions=None):
+    def plan(self, obs_0, obs_g, actions=None, batch=False):
         """
         Args:
             actions: normalized
@@ -71,10 +71,14 @@ class CEMPlanner(BasePlanner):
         trans_obs_0 = move_to_device(
             self.preprocessor.transform_obs(obs_0), self.device
         )
-        trans_obs_g = move_to_device(
-            self.preprocessor.transform_obs(obs_g), self.device
-        )
-        z_obs_g = self.wm.encode_obs(trans_obs_g)
+        if batch:
+            trans_obs_g = [ move_to_device(self.preprocessor.transform_obs(g), self.device) for g in obs_g ]
+            z_obs_g = [self.wm.encode_obs(g) for g in trans_obs_g]
+        else:
+            trans_obs_g = move_to_device(
+                self.preprocessor.transform_obs(obs_g), self.device
+            )
+            z_obs_g = self.wm.encode_obs(trans_obs_g)
 
         mu, sigma = self.init_mu_sigma(obs_0, actions)
         mu, sigma = mu.to(self.device), sigma.to(self.device)
@@ -90,12 +94,20 @@ class CEMPlanner(BasePlanner):
                     )
                     for key, arr in trans_obs_0.items()
                 }
-                cur_z_obs_g = {
-                    key: repeat(
-                        arr[traj].unsqueeze(0), "1 ... -> n ...", n=self.num_samples
-                    )
-                    for key, arr in z_obs_g.items()
-                }
+                if batch:
+                    cur_z_obs_g = [{
+                        key = repeat(
+                            arr[traf].unsqueeze(0), "1 ... -> n ...", n=self.num_samples
+                        )
+                        for key, arr in g.items()
+                    } for g in z_obs_g ]
+                else:
+                    cur_z_obs_g = {
+                        key: repeat(
+                            arr[traj].unsqueeze(0), "1 ... -> n ...", n=self.num_samples
+                        )
+                        for key, arr in z_obs_g.items()
+                    }
                 action = (
                     torch.randn(self.num_samples, self.horizon, self.action_dim).to(
                         self.device
@@ -110,7 +122,7 @@ class CEMPlanner(BasePlanner):
                         act=action,
                     )
 
-                loss = self.objective_fn(i_z_obses, cur_z_obs_g)
+                loss = self.objective_fn(i_z_obses, cur_z_obs_g, batch)
                 topk_idx = torch.argsort(loss)[: self.topk]
                 topk_action = action[topk_idx]
                 losses.append(loss[topk_idx[0]].item())

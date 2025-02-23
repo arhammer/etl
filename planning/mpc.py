@@ -69,7 +69,7 @@ class MPCPlanner(BasePlanner):
         actions[mask] = masked_actions.to(device)
         return actions
 
-    def plan(self, obs_0, obs_g, actions=None):
+    def plan(self, obs_0, obs_g, actions=None, batch=False):
         """
         actions is NOT used
         Returns:
@@ -88,6 +88,7 @@ class MPCPlanner(BasePlanner):
                 obs_0=cur_obs_0,
                 obs_g=obs_g,
                 actions=memo_actions,
+                batch=batch,
             )  # (b, t, act_dim)
             taken_actions = actions.detach()[:, : self.n_taken_actions]
             self._apply_success_mask(taken_actions)

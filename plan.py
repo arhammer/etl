@@ -331,6 +331,7 @@ class PlanWorkspace:
             obs_0=self.obs_0,
             obs_g=self.obs_g,
             actions=actions_init,
+            batch=self.cfg_dict["reach_and_avoid"]
         )
         logs, successes, _, _ = self.evaluator.eval_actions(
             actions.detach(), action_len, save_video=True, filename="output_final"

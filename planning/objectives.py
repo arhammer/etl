@@ -27,7 +27,9 @@ def create_objective_fn(alpha, base, mode="last"):
     """
     metric = nn.MSELoss(reduction="none")
 
-    def objective_fn_mse_last(z_obs_pred, z_obs_tgt):
+    def objective_fn_mse_last(z_obs_pred, z_obs_tgt, batch=False):
+        if batch:
+            z_obs_tgt = z_obs_tgt[0]
         """
         Args:
             z_obs_pred: dict, {'visual': (B, T, *D_visual), 'proprio': (B, T, *D_proprio)}
@@ -44,7 +46,9 @@ def create_objective_fn(alpha, base, mode="last"):
         loss = loss_visual + alpha * loss_proprio
         return loss
 
-    def objective_fn_mse_all(z_obs_pred, z_obs_tgt):
+    def objective_fn_mse_all(z_obs_pred, z_obs_tgt, batch=False):
+        if batch:
+            z_obs_tgt = z_obs_tgt[0]
         """
         Loss calculated on all pred frames.
         Args:
@@ -68,20 +72,81 @@ def create_objective_fn(alpha, base, mode="last"):
         loss = loss_visual + alpha * loss_proprio
         return loss
     
-    def objective_fn_cos(z_obs_pred, z_obs_tgt):
-        cost = 1 - dist.cosine(z_obs_pred["visual"][:,-1:], z_obs_tgt["visual"]) # higher similarity is lower cost
-        return cost 
+    def objective_fn_cos(z_obs_pred, z_obs_tgt, batch=False):
+        if not batch:
+            cost = 1 - dist.cosine(z_obs_pred["visual"][:,-1:], z_obs_tgt["visual"]) # higher similarity is lower cost
+            return cost 
+        else:
+            cost = 0
+            for z in z_obs_tgt:
+                cos = 1 - dist.cosine(z_obs_pred["visual"][:,-1:], z["visual"])
+                if z["reach"]:
+                    cost = cost + cos
+                else:
+                    cost = cost - cos
+            return cost
     
-    def objective_fn_mahal(z_obs_pred, z_obs_tgt):
-        e1 = z_obs_pred["visual"][:,-1:]
-        e2 = z_obs_tgt["visual"]
-        # compute covariance matrix inverse
-        inv_cov = np.linalg.inv(np.cov([e1, e2], rowvar=False))
-        cost = 1 - dist.mahalanobis(e1, e2, inv_cov)
-        return cost 
+    def objective_fn_mahal(z_obs_pred, z_obs_tgt, batch=False):
+        if not batch:
+            e1 = z_obs_pred["visual"][:,-1:]
+            e2 = z_obs_tgt["visual"]
+            # compute covariance matrix inverse
+            inv_cov = np.linalg.inv(np.cov([e1, e2], rowvar=False))
+            cost = 1 - dist.mahalanobis(e1, e2, inv_cov)
+            return cost 
+        else:
+            e1 = z_obs_pred["visual"][:,-1:]
+            cost = 0
+            for z in z_obs_tgt:
+                e2 = z["visual"]
+                inv_cov = np.linalg.inv(np.cov([e1, e2], rowvar=False))
+                mah = 1-dist.mahalanobis(e1, e2, inv_cov)
+                if z["reach"]:
+                    cost = cost + mah
+                else:
+                    cost = cost - mah
+            return cost
 
-    def objective_fn_cd(z_obs_pred, z_obs_tgt):
-        return chamfer_distance(z_obs_pred["visual"][:,-1:], z_obs_tgt["visual"])
+    def objective_fn_cd(z_obs_pred, z_obs_tgt, batch=False):
+        if not batch:
+            return chamfer_distance(z_obs_pred["visual"][:,-1:], z_obs_tgt["visual"])
+        else:
+            dist = 0
+            for each z in z_obs_tgt:
+                cd = chamfer_distance(z_obs_pred["visual"][:,-1:], z["visual"])
+                if z["reach"]: # if trying to reach that goal
+                    dist = dist + cd
+                else:
+                    dist = dist - cd
+            return dist
+
+    def objective_fn_l1(z_obs_pred, z_obs_tgt, batch=False):
+        if not batch:
+            cost = 1 - dist.cityblock(z_obs_pred["visual"][:,-1:], z_obs_tgt["visual"]) # higher similarity is lower cost
+            return cost 
+        else:
+            cost = 0
+            for z in z_obs_tgt:
+                cos = 1 - dist.cityblock(z_obs_pred["visual"][:,-1:], z["visual"])
+                if z["reach"]:
+                    cost = cost + cos
+                else:
+                    cost = cost - cos
+            return cost
+
+    def objective_fn_l2(z_obs_pred, z_obs_tgt, batch=False):
+        if not batch:
+            cost = 1 - dist.euclidean(z_obs_pred["visual"][:,-1:], z_obs_tgt["visual"]) # higher similarity is lower cost
+            return cost 
+        else:
+            cost = 0
+            for z in z_obs_tgt:
+                cos = 1 - dist.euclidean(z_obs_pred["visual"][:,-1:], z["visual"])
+                if z["reach"]:
+                    cost = cost + cos
+                else:
+                    cost = cost - cos
+            return cost
 
     if mode == "mse_last":
         return objective_fn_last
@@ -91,5 +156,9 @@ def create_objective_fn(alpha, base, mode="last"):
         return objective_fn_cos
     elif mode == "mahal":
         return objective_fn_mahal
+    elif mode == "l1":
+        return objective_fn_l1
+    elif mode == "l2":
+        return objective_fn_l2
     else:
         raise NotImplementedError

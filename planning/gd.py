@@ -68,7 +68,7 @@ class GDPlanner(BasePlanner):
     def get_action_optimizer(self, actions):
         return torch.optim.SGD([actions], lr=self.lr)
 
-    def plan(self, obs_0, obs_g, actions=None):
+    def plan(self, obs_0, obs_g, actions=None, batch=False):
         """
         Args:
             actions: normalized
@@ -78,11 +78,16 @@ class GDPlanner(BasePlanner):
         trans_obs_0 = move_to_device(
             self.preprocessor.transform_obs(obs_0), self.device
         )
-        trans_obs_g = move_to_device(
-            self.preprocessor.transform_obs(obs_g), self.device
-        )
-        z_obs_g = self.wm.encode_obs(trans_obs_g)
-        z_obs_g_detached = {key: value.detach() for key, value in z_obs_g.items()}
+        if batch:
+            trans_obs_g = [ move_to_device(self.preprocessor.transform_obs(g), self.device) for g in obs_g ]
+            z_obs_g = [self.wm.encode_obs(g) for g in trans_obs_g]
+            z_obs_g_detached = [{key: value.detach() for key, value in g.items()} for g in z_obs_g]
+        else:
+            trans_obs_g = move_to_device(
+                self.preprocessor.transform_obs(obs_g), self.device
+            )
+            z_obs_g = self.wm.encode_obs(trans_obs_g)
+            z_obs_g_detached = {key: value.detach() for key, value in z_obs_g.items()}
 
         actions = self.init_actions(obs_0, actions).to(self.device)
         actions.requires_grad = True
