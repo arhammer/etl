@@ -14,7 +14,7 @@ hydra:
     nodes: 1
     tasks_per_node: 1
     cpus_per_task: 16
-    mem_gb: 256
+    mem_gb: 4 
     gres: "gpu:h100:1"
     qos: "explore"
     timeout_min: 720
@@ -23,15 +23,15 @@ hydra:
             "export MASTER_PORT=$(for port in $(shuf -i 30000-65500 -n 20); do if [[ $(netstat -tupln 2>&1 | grep $port | wc -l) -eq 0 ]] ; then echo $port; break; fi; done;)",]
 
 # model to load for planning
-ckpt_base_path: /home/arhammer/Documents/VLTL/dino_wm # put absolute path here. Checkpoints will be loaded from ${ckpt_base_path}/outputs
+ckpt_base_path: /home/arhammer/Documents/VLTL/etl # put absolute path here. Checkpoints will be loaded from ${ckpt_base_path}/outputs
 model_name: granular
 model_epoch: latest
 
 seed: 99
-n_evals: 10
+n_evals: 1
 goal_source: 'random_state' # 'random_state' or 'dset' or 'random_action' 
-goal_file_path: ''
-avoid_and_reach: True # only matters when goal_source == 'file'
+goal_file_path: '/home/arhammer/Documents/VLTL/etl/example.pkl'
+reach_and_avoid: True # only matters when goal_source == 'file'
 goal_H: 5 # specifies how far away the goal is if goal_source is 'dset'
 n_plot_samples: 10
 
