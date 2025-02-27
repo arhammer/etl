@@ -131,7 +131,9 @@ class VWorldModel(nn.Module):
 
         proprio = obs['proprio']
         proprio_emb = self.encode_proprio(proprio)
-        return {"visual": visual_embs, "proprio": proprio_emb}
+        ret = {"visual": visual_embs, "proprio": proprio_emb}
+        if "reach" in obs.keys(): ret["reach"] = obs["reach"]
+        return ret
 
     def predict(self, z):  # in embedding space
         """

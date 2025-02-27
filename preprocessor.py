@@ -59,4 +59,5 @@ class Preprocessor:
         transformed_obs = {}
         transformed_obs['visual'] = self.transform_obs_visual(obs['visual'])
         transformed_obs['proprio'] = self.normalize_proprios(torch.tensor(obs['proprio']))
+        if "reach" in obs.keys(): transformed_obs["reach"] = obs["reach"]
         return transformed_obs

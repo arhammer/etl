@@ -84,7 +84,7 @@ class PlanEvaluator:  # evaluator for planning
         return result
 
     def eval_actions(
-        self, actions, action_len=None, filename="output", save_video=False
+        self, actions, action_len=None, filename="output", save_video=False, batch=False
     ):
         """
         actions: detached torch tensors on cuda
@@ -98,9 +98,12 @@ class PlanEvaluator:  # evaluator for planning
         trans_obs_0 = move_to_device(
             self.preprocessor.transform_obs(self.obs_0), self.device
         )
-        trans_obs_g = move_to_device(
-            self.preprocessor.transform_obs(self.obs_g), self.device
-        )
+        if batch:
+            trans_obs_g = [ move_to_device(self.preprocessor.transform_obs(g), self.device) for g in self.obs_g ]
+        else:
+            trans_obs_g = move_to_device(
+                self.preprocessor.transform_obs(self.obs_g), self.device
+            )
         with torch.no_grad():
             i_z_obses, _ = self.wm.rollout(
                 obs_0=trans_obs_0,
@@ -125,6 +128,7 @@ class PlanEvaluator:  # evaluator for planning
             e_state=e_final_state,
             e_obs=e_final_obs,
             i_z_obs=i_final_z_obs,
+            batch=batch,
         )
 
         # plot trajs
@@ -141,11 +145,12 @@ class PlanEvaluator:  # evaluator for planning
                 successes=successes,
                 save_video=save_video,
                 filename=filename,
+                batch=batch,
             )
 
         return logs, successes, e_obses, e_states
 
-    def _compute_rollout_metrics(self, e_state, e_obs, i_z_obs):
+    def _compute_rollout_metrics(self, e_state, e_obs, i_z_obs, batch=False):
         """
         Args
             e_state
@@ -162,14 +167,36 @@ class PlanEvaluator:  # evaluator for planning
             f"success_rate" if key == "success" else f"mean_{key}": np.mean(value) if key != "success" else np.mean(value.astype(float))
             for key, value in eval_results.items()
         }
+        for cdidx in range(len(eval_results["chamfer_distance"])):
+            logs.update({f"CD {cdidx}" : eval_results["chamfer_distance"][cdidx]})
 
         print("Success rate: ", logs['success_rate'])
         print(eval_results)
 
-        visual_dists = np.linalg.norm(e_obs["visual"] - self.obs_g["visual"], axis=1)
-        mean_visual_dist = np.mean(visual_dists)
-        proprio_dists = np.linalg.norm(e_obs["proprio"] - self.obs_g["proprio"], axis=1)
-        mean_proprio_dist = np.mean(proprio_dists)
+        if batch:
+            visual_reach = []
+            visual_avoid = []
+            proprio_reach = []
+            proprio_avoid = []
+            for i in range(len(self.obs_g)):
+                if self.obs_g[i]["reach"]:
+                    visual_reach.append(np.linalg.norm(e_obs["visual"] - self.obs_g[i]["visual"], axis=1))
+                    proprio_reach.append(np.linalg.norm(e_obs["proprio"] - self.obs_g[i]["proprio"], axis=1))
+                else:
+                    visual_avoid.append(np.linalg.norm(e_obs["visual"] - self.obs_g[i]["visual"], axis=1))
+                    proprio_avoid.append(np.linalg.norm(e_obs["proprio"] - self.obs_g[i]["proprio"], axis=1))
+            if visual_reach == []: mean_visual_dist = np.max(visual_avoid)
+            elif visual_avoid == []: mean_visual_dist = np.min(visual_reach)
+            else: mean_visual_dist = np.min(visual_reach) + np.max(visual_avoid)
+            if proprio_reach == []: mean_proprio_dist = np.max(proprio_avoid)
+            elif proprio_avoid == []: mean_proprio_dist = np.min(proprio_reach)
+            else: mean_proprio_dist = np.min(proprio_reach) + np.max(proprio_avoid)
+        else:
+            visual_dists = np.linalg.norm(e_obs["visual"] - self.obs_g["visual"], axis=1)
+            proprio_dists = np.linalg.norm(e_obs["proprio"] - self.obs_g["proprio"], axis=1)
+            mean_visual_dist = np.mean(visual_dists)
+            mean_proprio_dist = np.mean(proprio_dists)
+            
 
         e_obs = move_to_device(self.preprocessor.transform_obs(e_obs), self.device)
         e_z_obs = self.wm.encode_obs(e_obs)
@@ -186,7 +213,7 @@ class PlanEvaluator:  # evaluator for planning
         return logs, successes
 
     def _plot_rollout_compare(
-        self, e_visuals, i_visuals, successes, save_video=False, filename=""
+        self, e_visuals, i_visuals, successes, save_video=False, filename="", batch=False
     ):
         """
         i_visuals may have less frames than e_visuals due to frameskip, so pad accordingly
@@ -196,7 +223,13 @@ class PlanEvaluator:  # evaluator for planning
         """
         e_visuals = e_visuals[: self.n_plot_samples]
         i_visuals = i_visuals[: self.n_plot_samples]
-        goal_visual = self.obs_g["visual"][: self.n_plot_samples]
+        if batch:
+            for i in range(len(self.obs_g)):
+                if self.obs_g[i]["reach"]:
+                    goal_visual = self.obs_g[i]["visual"][: self.n_plot_samples]
+                    break
+        else:
+            goal_visual = self.obs_g["visual"][: self.n_plot_samples]
         goal_visual = self.preprocessor.transform_obs_visual(goal_visual)
 
         i_visuals = i_visuals.unsqueeze(2)

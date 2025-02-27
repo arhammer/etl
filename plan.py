@@ -103,7 +103,7 @@ def build_plan_cfg_dicts(
         override_args.pop("planner")
         cfg = OmegaConf.merge(cfg, OmegaConf.create(override_args))
         cfg_dict = OmegaConf.to_container(cfg)
-        cfg_dict["planner"]["horizon"] = cfg_dict["goal_H"]  # assume planning horizon equals to goal horizon
+        cfg_dict["planner"]["horizon"] = 10#cfg_dict["goal_H"]  # assume planning horizon equals to goal horizon
         cfg_dicts.append(cfg_dict)
     return cfg_dicts
 
@@ -133,7 +133,7 @@ class PlanWorkspace:
         print("eval_seed: ", self.eval_seed)
         self.n_evals = cfg_dict["n_evals"]
         self.goal_source = cfg_dict["goal_source"]
-        self.goal_H = cfg_dict["goal_H"]
+        self.goal_H = 10#cfg_dict["goal_H"]
         self.action_dim = self.dset.action_dim * self.frameskip
         self.debug_dset_init = cfg_dict["debug_dset_init"]
 
@@ -190,10 +190,10 @@ class PlanWorkspace:
         # optional: assume planning horizon equals to goal horizon
         from planning.mpc import MPCPlanner
         if isinstance(self.planner, MPCPlanner):
-            self.planner.sub_planner.horizon = cfg_dict["goal_H"]
-            self.planner.n_taken_actions = cfg_dict["goal_H"]
+            self.planner.sub_planner.horizon = 10#cfg_dict["goal_H"]
+            self.planner.n_taken_actions = 10#cfg_dict["goal_H"]
         else:
-            self.planner.horizon = cfg_dict["goal_H"]
+            self.planner.horizon = 10#cfg_dict["goal_H"]
 
         self.dump_targets()
 
@@ -331,10 +331,10 @@ class PlanWorkspace:
             obs_0=self.obs_0,
             obs_g=self.obs_g,
             actions=actions_init,
-            batch=self.cfg_dict["reach_and_avoid"]
+            batch=self.cfg_dict["reach_and_avoid"] if self.cfg_dict["goal_source"] == "file" else False,
         )
         logs, successes, _, _ = self.evaluator.eval_actions(
-            actions.detach(), action_len, save_video=True, filename="output_final"
+            actions.detach(), action_len, save_video=False, filename="output_final"
         )
         logs = {f"final_eval/{k}": v for k, v in logs.items()}
         self.wandb_run.log(logs)

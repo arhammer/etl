@@ -106,6 +106,7 @@ class MPCPlanner(BasePlanner):
                 self.action_len,
                 filename=f"plan{self.iter}",
                 save_video=True,
+                batch=batch,
             )
             new_successes = successes & ~self.is_success  # Identify new successes
             self.is_success = (

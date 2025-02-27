@@ -3,7 +3,7 @@ import numpy as np
 from einops import rearrange, repeat
 from .base_planner import BasePlanner
 from utils import move_to_device
-
+from .objectives import chamfer_distance as chamf
 
 class CEMPlanner(BasePlanner):
     def __init__(
@@ -84,7 +84,7 @@ class CEMPlanner(BasePlanner):
         mu, sigma = mu.to(self.device), sigma.to(self.device)
         n_evals = mu.shape[0]
 
-        for i in range(self.opt_steps):
+        for idx in range(self.opt_steps):
             # optimize individual instances
             losses = []
             for traj in range(n_evals):
@@ -95,12 +95,15 @@ class CEMPlanner(BasePlanner):
                     for key, arr in trans_obs_0.items()
                 }
                 if batch:
-                    cur_z_obs_g = [{
-                        key = repeat(
-                            arr[traf].unsqueeze(0), "1 ... -> n ...", n=self.num_samples
-                        )
-                        for key, arr in g.items()
-                    } for g in z_obs_g ]
+                    cur_z_obs_g = [{}]*len(z_obs_g)
+                    for i in range(len(cur_z_obs_g)):
+                        for key in z_obs_g[i]:
+                            if key=="reach":
+                                cur_z_obs_g[i]["reach"] = z_obs_g[i]["reach"]
+                            else:
+                                cur_z_obs_g[i][key] = repeat(
+                                    z_obs_g[i][key][traj].unsqueeze(0), "1 ... -> n ...", n=self.num_samples
+                                )
                 else:
                     cur_z_obs_g = {
                         key: repeat(
@@ -122,22 +125,60 @@ class CEMPlanner(BasePlanner):
                         act=action,
                     )
 
-                loss = self.objective_fn(i_z_obses, cur_z_obs_g, batch)
+                loss = 0
+                #loss = self.objective_fn(i_z_obses, cur_z_obs_g)
+                #print(loss.shape)
+                #print('loss is \n\n\n\n')
+                cdavoid = {}
+                if not batch:
+                    loss = self.objective_fn(i_z_obses, cur_z_obs_g)
+                else:
+                    '''reach_loss = []
+                    avoid_loss = []
+                    for czog in range(len(cur_z_obs_g)):
+                        l = self.objective_fn(i_z_obses, cur_z_obs_g[czog])
+                        if cur_z_obs_g[czog]["reach"]:
+                            reach_loss.append(l)
+                        else:
+                            avoid_loss.append(l)
+                            # print out chamfer distance between izobses and current avoid
+                            cd = chamf(i_z_obses, cur_z_obs_g[czog])
+                            cdavoid.update({f"CD to avoid {czog}": cd})
+                            print(f"\tCD to avoid {czog}: {cd}")
+                    if reach_loss == []: loss = np.max(avoid_loss)
+                    elif avoid_loss == []: loss = np.min(reach_loss)
+                    else: loss = np.min(reach_loss) + np.max(avoid_loss)'''
+                    for czog in range(len(cur_z_obs_g)):
+                        l = self.objective_fn(i_z_obses, cur_z_obs_g[czog])
+                        if cur_z_obs_g[czog]["reach"]:
+                            loss = loss + l
+                            cd = chamf(i_z_obses["visual"], cur_z_obs_g[czog]["visual"])
+                            cdavoid.update({f"CD to reach {czog}": cd})
+                            print(f"\tCD to reach {czog}: {cd}")
+                        else:
+                            loss = loss - l
+                            cd = chamf(i_z_obses, cur_z_obs_g[czog])
+                            cdavoid.update({f"CD to avoid {czog}": cd})
+                            print(f"\tCD to avoid {czog}: {cd}")
+                
+                   
                 topk_idx = torch.argsort(loss)[: self.topk]
+                #topk_idx = torch.argsort(loss)[0][:, self.topk]
                 topk_action = action[topk_idx]
                 losses.append(loss[topk_idx[0]].item())
                 mu[traj] = topk_action.mean(dim=0)
                 sigma[traj] = topk_action.std(dim=0)
 
             self.wandb_run.log(
-                {f"{self.logging_prefix}/loss": np.mean(losses), "step": i + 1}
+                {f"{self.logging_prefix}/loss": np.mean(losses), "step": idx + 1}
             )
-            if self.evaluator is not None and i % self.eval_every == 0:
+            if self.evaluator is not None and idx % self.eval_every == 0:
                 logs, successes, _, _ = self.evaluator.eval_actions(
-                    mu, filename=f"{self.logging_prefix}_output_{i+1}"
+                    mu, filename=f"{self.logging_prefix}_output_{idx+1}", batch=batch
                 )
                 logs = {f"{self.logging_prefix}/{k}": v for k, v in logs.items()}
-                logs.update({"step": i + 1})
+                logs.update({"step": idx + 1})
+                logs.update(cdavoid)
                 self.wandb_run.log(logs)
                 self.dump_logs(logs)
                 if np.all(successes):
